@@ -18,4 +18,3 @@ std = ["utf8-decode/std"]
 
 [dependencies]
 utf8-decode = { version = "2.0.0", default-features = false }
-thiserror = "1.0.40"

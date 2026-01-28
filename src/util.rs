@@ -38,7 +38,7 @@ impl From<Utf8Error> for ByteError {
 	}
 }
 
-impl std::error::Error for ByteError {}
+impl core::error::Error for ByteError {}
 
 /// Untrusted bytes iterator.
 ///
@@ -75,4 +75,4 @@ impl<B: Iterator<Item = u8>> Iterator for TryEncodedBytes<B> {
 	}
 }
 
-impl<B: Iterator<Item = u8>> std::iter::FusedIterator for TryEncodedBytes<B> {}
+impl<B: Iterator<Item = u8>> core::iter::FusedIterator for TryEncodedBytes<B> {}

@@ -6,9 +6,12 @@ use core::{
 };
 
 use crate::{
-	InvalidPctString, PctString,
+	InvalidPctString,
 	util::{TryEncodedBytes, to_digit},
 };
+
+#[cfg(feature = "std")]
+use crate::PctString;
 
 /// Percent-Encoded string slice.
 ///
@@ -67,7 +70,7 @@ impl PctStr {
 	///
 	/// The input `str` must be a valid percent-encoded string.
 	pub unsafe fn new_unchecked<S: AsRef<[u8]> + ?Sized>(input: &S) -> &PctStr {
-		unsafe { std::mem::transmute::<&[u8], &PctStr>(input.as_ref()) }
+		unsafe { core::mem::transmute::<&[u8], &PctStr>(input.as_ref()) }
 	}
 
 	/// Checks that the given iterator produces a valid percent-encoded string.
@@ -123,6 +126,7 @@ impl PctStr {
 	/// Decoding.
 	///
 	/// Return the string with the percent-encoded characters decoded.
+	#[cfg(feature = "std")]
 	pub fn decode(&self) -> String {
 		let mut decoded = String::with_capacity(self.len());
 		for c in self.chars() {
@@ -175,6 +179,7 @@ impl PartialEq<str> for PctStr {
 	}
 }
 
+#[cfg(feature = "std")]
 impl PartialEq<PctString> for PctStr {
 	#[inline]
 	fn eq(&self, other: &PctString) -> bool {
@@ -221,6 +226,7 @@ impl Ord for PctStr {
 	}
 }
 
+#[cfg(feature = "std")]
 impl PartialOrd<PctString> for PctStr {
 	fn partial_cmp(&self, other: &PctString) -> Option<Ordering> {
 		self.partial_cmp(other.as_pct_str())
@@ -248,6 +254,7 @@ impl Debug for PctStr {
 	}
 }
 
+#[cfg(feature = "std")]
 impl ToOwned for PctStr {
 	type Owned = PctString;
 
@@ -277,7 +284,7 @@ impl AsRef<[u8]> for PctStr {
 /// Bytes iterator.
 ///
 /// Iterates over the decoded bytes of a percent-encoded string.
-pub struct Bytes<'a>(std::slice::Iter<'a, u8>);
+pub struct Bytes<'a>(core::slice::Iter<'a, u8>);
 
 impl<'a> Iterator for Bytes<'a> {
 	type Item = u8;
@@ -301,7 +308,7 @@ impl<'a> Iterator for Bytes<'a> {
 	}
 }
 
-impl<'a> std::iter::FusedIterator for Bytes<'a> {}
+impl<'a> core::iter::FusedIterator for Bytes<'a> {}
 
 /// Characters iterator.
 ///
@@ -327,4 +334,4 @@ impl<'a> Iterator for Chars<'a> {
 	}
 }
 
-impl<'a> std::iter::FusedIterator for Chars<'a> {}
+impl<'a> core::iter::FusedIterator for Chars<'a> {}
