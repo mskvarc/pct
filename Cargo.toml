@@ -1,8 +1,6 @@
 [package]
 name = "pct-str"
-version = "2.0.0"
 authors = ["Timothée Haudebourg <author@haudebourg.net>"]
-edition = "2024"
 categories = ["web-programming", "encoding"]
 keywords = ["percent", "percent-encoded", "encode", "decode", "string"]
 description = "Percent-encoded strings for URL, URI, IRI, etc."
@@ -10,6 +8,9 @@ repository = "https://github.com/timothee-haudebourg/pct-str"
 documentation = "https://docs.rs/pct-str"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
+edition = "2024"
+rust-version = "1.85.1"
+version = "3.0.0"
 
 [features]
 default = ["std"]
