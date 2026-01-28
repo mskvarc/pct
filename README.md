@@ -28,13 +28,13 @@ assert_eq!(decoded_string, "Hello World!")
 To create new percent-encoded strings, use the [`PctString`] to copy or encode new strings.
 
 ```rust
-use pct_str::{PctString, URIReserved};
+use pct_str::{PctString, UriReserved};
 
 // Copy the given percent-encoded string.
 let pct_string = PctString::new("Hello%20World%21").unwrap();
 
 // Encode the given regular string.
-let pct_string = PctString::encode("Hello World!".chars(), URIReserved);
+let pct_string = PctString::encode("Hello World!".chars(), UriReserved::Any);
 
 assert_eq!(pct_string.as_str(), "Hello%20World%21");
 ```
@@ -43,13 +43,13 @@ You can choose which character will be percent-encoded by the `encode` function
 by implementing the [`Encoder`] trait.
 
 ```rust
-use pct_str::{URIReserved, PctString};
+use pct_str::{UriReserved, PctString};
 
 struct CustomEncoder;
 
 impl pct_str::Encoder for CustomEncoder {
   fn encode(&self, c: char) -> bool {
-    URIReserved.encode(c) || c.is_uppercase()
+    UriReserved::Any.encode(c) || c.is_uppercase()
   }
 }
 
@@ -57,10 +57,10 @@ let pct_string = PctString::encode("Hello World!".chars(), CustomEncoder);
 assert_eq!(pct_string.as_str(), "%48ello%20%57orld%21")
 ```
 
-[`String`]: https://doc.rust-lang.org/stable/alloc/string/struct.String.html
-[`PctStr`]: https://docs.rs/pct-str/latest/pct_str/struct.PctStr.html
-[`PctString`]: https://docs.rs/pct-str/latest/pct_str/struct.PctString.html
-[`Encoder`]: https://docs.rs/pct-str/latest/pct_str/trait.Encoder.html
+[`String`]: std::string::String
+[`PctStr`]: https://docs.rs/pct-str/latest/pct_str/nsized/struct.PctStr.html
+[`PctString`]: https://docs.rs/pct-str/latest/pct_str/sized/struct.PctString.html
+[`Encoder`]: https://docs.rs/pct-str/latest/pct_str/encoder/trait.Encoder.html
 
 <!-- cargo-rdme end -->
 

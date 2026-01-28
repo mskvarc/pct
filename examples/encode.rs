@@ -1,12 +1,12 @@
 extern crate pct_str;
 
-use pct_str::{PctString, URIReserved};
+use pct_str::{PctString, UriReserved};
 
 struct CustomEncoder;
 
 impl pct_str::Encoder for CustomEncoder {
 	fn encode(&self, c: char) -> bool {
-		URIReserved.encode(c) || c.is_uppercase()
+		UriReserved::Any.encode(c) || c.is_uppercase()
 	}
 }
 
@@ -15,7 +15,7 @@ fn main() {
 	// using the [`PctString::encode`] function.
 	// It takes a `char` iterator and a [`Encoder`] instance deciding which
 	// characters to encode.
-	let pct_string = PctString::encode("Hello World!".chars(), URIReserved);
+	let pct_string = PctString::encode("Hello World!".chars(), UriReserved::Any);
 	// [`URIReserved`] is a predefined encoder for URI-reserved characters.
 	assert_eq!(pct_string.as_str(), "Hello World%21");
 

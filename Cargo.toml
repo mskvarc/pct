@@ -2,7 +2,7 @@
 name = "pct-str"
 version = "2.0.0"
 authors = ["Timothée Haudebourg <author@haudebourg.net>"]
-edition = "2021"
+edition = "2024"
 categories = ["web-programming", "encoding"]
 keywords = ["percent", "percent-encoded", "encode", "decode", "string"]
 description = "Percent-encoded strings for URL, URI, IRI, etc."
@@ -11,6 +11,10 @@ documentation = "https://docs.rs/pct-str"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 
+[features]
+default = ["std"]
+std = ["utf8-decode/std"]
+
 [dependencies]
-utf8-decode = "1.0.1"
+utf8-decode = { version = "2.0.0", default-features = false }
 thiserror = "1.0.40"
