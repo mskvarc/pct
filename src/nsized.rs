@@ -134,6 +134,66 @@ impl PctStr {
         Bytes(self.0.iter())
     }
 
+    /// Iterate over bytes in RFC 3986 §6.2.2.2 normalized form:
+    /// percent-encoded *unreserved* octets are decoded in place, all other
+    /// `%XX` triples stay encoded with uppercase hex digits.
+    #[inline]
+    pub fn bytes_rfc3986(&self) -> Rfc3986Bytes<'_> {
+        Rfc3986Bytes::new(&self.0)
+    }
+
+    /// RFC 3986 §6.2.2.2 equality: two strings compare equal iff their
+    /// `bytes_rfc3986` streams are byte-identical. Unlike [`PartialEq`],
+    /// pct-encoded *reserved* octets stay encoded (so `"%2F"` ≠ `"/"`).
+    pub fn eq_rfc3986(&self, other: &PctStr) -> bool {
+        if self.0 == other.0 {
+            return true;
+        }
+        self.bytes_rfc3986().eq(other.bytes_rfc3986())
+    }
+
+    /// RFC 3986 §6.2.2.2 ordering. See [`PctStr::eq_rfc3986`].
+    pub fn cmp_rfc3986(&self, other: &PctStr) -> Ordering {
+        self.bytes_rfc3986().cmp(other.bytes_rfc3986())
+    }
+
+    /// RFC 3986 §6.2.2.2 hash. Bulk-writes plain runs between `%`s and, for
+    /// each triplet, writes either the decoded unreserved byte or the three
+    /// bytes of the (uppercased) `%XX`.
+    pub fn hash_rfc3986<H: Hasher>(&self, hasher: &mut H) {
+        let bytes: &[u8] = &self.0;
+        #[cfg(feature = "memchr")]
+        {
+            if find_percent(bytes).is_none() {
+                hasher.write(bytes);
+                return;
+            }
+            let mut prev = 0usize;
+            for pct in memchr::memchr_iter(b'%', bytes) {
+                hasher.write(&bytes[prev..pct]);
+                let h1 = bytes[pct + 1];
+                let h2 = bytes[pct + 2];
+                let a = HEX_VAL[h1 as usize];
+                let c = HEX_VAL[h2 as usize];
+                debug_assert!(a != 0xFF && c != 0xFF);
+                let decoded = (a << 4) | c;
+                if is_unreserved_byte(decoded) {
+                    hasher.write(&[decoded]);
+                } else {
+                    hasher.write(&[b'%', to_upper_hex_byte(h1), to_upper_hex_byte(h2)]);
+                }
+                prev = pct + 3;
+            }
+            hasher.write(&bytes[prev..]);
+        }
+        #[cfg(not(feature = "memchr"))]
+        {
+            for b in self.bytes_rfc3986() {
+                b.hash(hasher);
+            }
+        }
+    }
+
     /// Decoding.
     ///
     /// Return the string with the percent-encoded characters decoded.
@@ -407,6 +467,135 @@ impl<'a> Iterator for Chars<'a> {
 }
 
 impl<'a> core::iter::FusedIterator for Chars<'a> {}
+
+#[inline]
+fn is_unreserved_byte(b: u8) -> bool {
+    matches!(b,
+        b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9'
+        | b'-' | b'.' | b'_' | b'~'
+    )
+}
+
+#[inline]
+fn to_upper_hex_byte(b: u8) -> u8 {
+    // ASCII hex digit — PctStr invariant — uppercase if lowercase.
+    if b >= b'a' { b - b'a' + b'A' } else { b }
+}
+
+/// RFC 3986 §6.2.2.2 normalized byte iterator.
+///
+/// Yields the bytes of the underlying string after decoding only those
+/// `%XX` triples whose value is an *unreserved* octet. Reserved triples
+/// stay as `%` + two uppercase hex digits.
+pub struct Rfc3986Bytes<'a> {
+    iter: core::slice::Iter<'a, u8>,
+    pending: [u8; 2],
+    pending_len: u8,
+    pending_pos: u8,
+}
+
+impl<'a> Rfc3986Bytes<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self {
+            iter: bytes.iter(),
+            pending: [0; 2],
+            pending_len: 0,
+            pending_pos: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for Rfc3986Bytes<'a> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<u8> {
+        if self.pending_pos < self.pending_len {
+            let b = self.pending[self.pending_pos as usize];
+            self.pending_pos += 1;
+            return Some(b);
+        }
+        let b = *self.iter.next()?;
+        if b == b'%' {
+            // SAFETY: PctStr invariant guarantees two hex digits follow.
+            let h1 = *self.iter.next().unwrap();
+            let h2 = *self.iter.next().unwrap();
+            let a = HEX_VAL[h1 as usize];
+            let c = HEX_VAL[h2 as usize];
+            debug_assert!(a != 0xFF && c != 0xFF);
+            let decoded = (a << 4) | c;
+            if is_unreserved_byte(decoded) {
+                return Some(decoded);
+            }
+            self.pending = [to_upper_hex_byte(h1), to_upper_hex_byte(h2)];
+            self.pending_len = 2;
+            self.pending_pos = 0;
+            return Some(b'%');
+        }
+        Some(b)
+    }
+}
+
+impl<'a> core::iter::FusedIterator for Rfc3986Bytes<'a> {}
+
+#[cfg(test)]
+mod rfc3986_tests {
+    use super::*;
+    use std::collections::hash_map::DefaultHasher;
+
+    fn h_rfc(s: &str) -> u64 {
+        let ps = PctStr::new(s).unwrap();
+        let mut h = DefaultHasher::new();
+        ps.hash_rfc3986(&mut h);
+        h.finish()
+    }
+
+    #[test]
+    fn unreserved_decoded_eq() {
+        let a = PctStr::new("%7Eb").unwrap();
+        let b = PctStr::new("~b").unwrap();
+        assert!(a.eq_rfc3986(b));
+    }
+
+    #[test]
+    fn reserved_stays_encoded_ne() {
+        let a = PctStr::new("%2Fb").unwrap();
+        let b = PctStr::new("/b").unwrap();
+        assert!(!a.eq_rfc3986(b));
+        assert!(a == b); // full-decode PartialEq says equal
+    }
+
+    #[test]
+    fn hex_case_insensitive() {
+        let a = PctStr::new("%2f").unwrap();
+        let b = PctStr::new("%2F").unwrap();
+        assert!(a.eq_rfc3986(b));
+        assert_eq!(h_rfc("%2f"), h_rfc("%2F"));
+    }
+
+    #[test]
+    fn ord_consistent() {
+        let a = PctStr::new("a").unwrap();
+        let b = PctStr::new("%62").unwrap(); // %62 = 'b'
+        assert_eq!(a.cmp_rfc3986(b), core::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn hash_matches_eq() {
+        let pairs: &[(&str, &str)] = &[
+            ("%7Eb", "~b"),
+            ("%2f", "%2F"),
+            ("abc", "abc"),
+            ("%2Fb", "%2fb"),
+        ];
+        for (x, y) in pairs {
+            let a = PctStr::new(x).unwrap();
+            let b = PctStr::new(y).unwrap();
+            if a.eq_rfc3986(b) {
+                assert_eq!(h_rfc(x), h_rfc(y), "hash mismatch for eq pair {x:?} {y:?}");
+            }
+        }
+    }
+}
 
 #[cfg(test)]
 mod fast_check_tests {
