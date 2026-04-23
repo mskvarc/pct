@@ -59,10 +59,16 @@ impl PctStr {
                 Err(_) => Err(InvalidPctString(input)),
             };
         }
-        if Self::validate(input_bytes.iter().copied()) {
-            Ok(unsafe { Self::new_unchecked(input_bytes) })
-        } else {
-            Err(InvalidPctString(input))
+        match validate_fast(input_bytes) {
+            FastCheck::Valid => Ok(unsafe { Self::new_unchecked(input_bytes) }),
+            FastCheck::Invalid => Err(InvalidPctString(input)),
+            FastCheck::NeedsFullCheck => {
+                if Self::validate(input_bytes.iter().copied()) {
+                    Ok(unsafe { Self::new_unchecked(input_bytes) })
+                } else {
+                    Err(InvalidPctString(input))
+                }
+            }
         }
     }
 
@@ -133,18 +139,108 @@ impl PctStr {
     /// Return the string with the percent-encoded characters decoded.
     #[cfg(feature = "std")]
     pub fn decode(&self) -> String {
-        if find_percent(&self.0).is_none() {
+        let bytes: &[u8] = &self.0;
+        if find_percent(bytes).is_none() {
             return self.as_str().to_owned();
         }
-        let mut decoded = Vec::with_capacity(self.0.len());
-        for b in self.bytes() {
-            decoded.push(b);
+        let mut out = Vec::with_capacity(bytes.len());
+
+        #[cfg(feature = "memchr")]
+        {
+            let mut prev = 0usize;
+            for pct in memchr::memchr_iter(b'%', bytes) {
+                // SAFETY-ish: PctStr invariant guarantees %XX with valid hex.
+                out.extend_from_slice(&bytes[prev..pct]);
+                let a = crate::util::HEX_VAL[bytes[pct + 1] as usize];
+                let b = crate::util::HEX_VAL[bytes[pct + 2] as usize];
+                debug_assert!(a != 0xFF && b != 0xFF);
+                out.push((a << 4) | b);
+                prev = pct + 3;
+            }
+            out.extend_from_slice(&bytes[prev..]);
         }
+        #[cfg(not(feature = "memchr"))]
+        {
+            for b in self.bytes() {
+                out.push(b);
+            }
+        }
+
         unsafe {
             // SAFETY: decoded bytes form valid UTF-8 because `validate` passed.
-            String::from_utf8_unchecked(decoded)
+            String::from_utf8_unchecked(out)
         }
     }
+}
+
+/// Outcome of [`validate_fast`].
+pub(crate) enum FastCheck {
+    /// Triplets valid and decoded output is pure ASCII → UTF-8 valid by construction.
+    Valid,
+    /// Triplet was malformed (incomplete or bad hex).
+    Invalid,
+    /// Triplets well-formed but some non-ASCII byte is present in input or
+    /// decoded output — caller must run the full UTF-8 validator.
+    NeedsFullCheck,
+}
+
+/// Walk a byte slice, verify every `%XX` triplet has valid hex, and track
+/// whether any non-ASCII byte appears in the input or in decoded triplet
+/// values. When everything stays ASCII, the decoded output is trivially
+/// UTF-8; otherwise the caller runs the full UTF-8 validator.
+#[inline]
+pub(crate) fn validate_fast(bytes: &[u8]) -> FastCheck {
+    use crate::util::HEX_VAL;
+    let n = bytes.len();
+    let mut had_non_ascii: u8 = 0;
+
+    #[cfg(feature = "memchr")]
+    {
+        let mut last = 0usize;
+        for pct in memchr::memchr_iter(b'%', bytes) {
+            // Scan the plain run before this '%' for non-ASCII.
+            for &b in &bytes[last..pct] {
+                had_non_ascii |= b & 0x80;
+            }
+            if pct + 2 >= n {
+                return FastCheck::Invalid;
+            }
+            let a = HEX_VAL[bytes[pct + 1] as usize];
+            let c = HEX_VAL[bytes[pct + 2] as usize];
+            if a | c == 0xFF {
+                return FastCheck::Invalid;
+            }
+            had_non_ascii |= ((a << 4) | c) & 0x80;
+            last = pct + 3;
+        }
+        for &b in &bytes[last..] {
+            had_non_ascii |= b & 0x80;
+        }
+    }
+    #[cfg(not(feature = "memchr"))]
+    {
+        let mut i = 0usize;
+        while i < n {
+            let b = bytes[i];
+            if b == b'%' {
+                if i + 2 >= n {
+                    return FastCheck::Invalid;
+                }
+                let a = HEX_VAL[bytes[i + 1] as usize];
+                let c = HEX_VAL[bytes[i + 2] as usize];
+                if a | c == 0xFF {
+                    return FastCheck::Invalid;
+                }
+                had_non_ascii |= ((a << 4) | c) & 0x80;
+                i += 3;
+            } else {
+                had_non_ascii |= b & 0x80;
+                i += 1;
+            }
+        }
+    }
+
+    if had_non_ascii == 0 { FastCheck::Valid } else { FastCheck::NeedsFullCheck }
 }
 
 impl PartialEq for PctStr {
@@ -289,3 +385,38 @@ impl<'a> Iterator for Chars<'a> {
 }
 
 impl<'a> core::iter::FusedIterator for Chars<'a> {}
+
+#[cfg(test)]
+mod fast_check_tests {
+    use super::{FastCheck, PctStr, validate_fast};
+
+    /// Cross-check `validate_fast` (plus fallback) against the original
+    /// `TryDecoder`-based `validate` over a pseudo-random input population.
+    #[test]
+    fn fast_vs_full() {
+        // Small deterministic LCG for repeatable "random" bytes.
+        let mut state: u32 = 0xdead_beef;
+        let mut next = || {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            (state >> 8) as u8
+        };
+
+        for _ in 0..512 {
+            let len = (next() as usize) % 128;
+            let mut buf = Vec::with_capacity(len);
+            for _ in 0..len {
+                let r = next();
+                // Bias towards '%' so we hit percent paths often.
+                buf.push(if r < 64 { b'%' } else { r });
+            }
+
+            let fast = match validate_fast(&buf) {
+                FastCheck::Valid => true,
+                FastCheck::Invalid => false,
+                FastCheck::NeedsFullCheck => PctStr::validate(buf.iter().copied()),
+            };
+            let full = PctStr::validate(buf.iter().copied());
+            assert_eq!(fast, full, "mismatch for {:?}", buf);
+        }
+    }
+}
