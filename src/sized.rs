@@ -149,20 +149,7 @@ impl AsRef<[u8]> for PctString {
 impl PartialEq for PctString {
     #[inline]
     fn eq(&self, other: &PctString) -> bool {
-        let mut a = self.chars();
-        let mut b = other.chars();
-
-        loop {
-            match (a.next(), b.next()) {
-                (Some(a), Some(b)) if a != b => return false,
-                (Some(_), None) => return false,
-                (None, Some(_)) => return false,
-                (None, None) => break,
-                _ => (),
-            }
-        }
-
-        true
+        **self == **other
     }
 }
 
@@ -171,47 +158,21 @@ impl Eq for PctString {}
 impl PartialEq<PctStr> for PctString {
     #[inline]
     fn eq(&self, other: &PctStr) -> bool {
-        let mut a = self.chars();
-        let mut b = other.chars();
-
-        loop {
-            match (a.next(), b.next()) {
-                (Some(a), Some(b)) if a != b => return false,
-                (Some(_), None) => return false,
-                (None, Some(_)) => return false,
-                (None, None) => break,
-                _ => (),
-            }
-        }
-
-        true
+        **self == *other
     }
 }
 
 impl PartialEq<&str> for PctString {
     #[inline]
     fn eq(&self, other: &&str) -> bool {
-        let mut a = self.chars();
-        let mut b = other.chars();
-
-        loop {
-            match (a.next(), b.next()) {
-                (Some(a), Some(b)) if a != b => return false,
-                (Some(_), None) => return false,
-                (None, Some(_)) => return false,
-                (None, None) => break,
-                _ => (),
-            }
-        }
-
-        true
+        **self == **other
     }
 }
 
 impl PartialEq<str> for PctString {
     #[inline]
     fn eq(&self, other: &str) -> bool {
-        self.eq(&other)
+        **self == *other
     }
 }
 
@@ -230,9 +191,7 @@ impl PartialOrd<PctStr> for PctString {
 impl Hash for PctString {
     #[inline]
     fn hash<H: Hasher>(&self, hasher: &mut H) {
-        for c in self.chars() {
-            c.hash(hasher)
-        }
+        (**self).hash(hasher)
     }
 }
 

@@ -92,7 +92,7 @@ impl PctStr {
     /// `value.as_bytes().len()`.
     #[inline]
     pub fn len(&self) -> usize {
-        self.chars().count()
+        self.bytes().filter(|b| (b & 0xC0) != 0x80).count()
     }
 
     /// Checks if the string is empty.
@@ -151,20 +151,10 @@ impl PctStr {
 impl PartialEq for PctStr {
     #[inline]
     fn eq(&self, other: &PctStr) -> bool {
-        let mut a = self.chars();
-        let mut b = other.chars();
-
-        loop {
-            match (a.next(), b.next()) {
-                (Some(a), Some(b)) if a != b => return false,
-                (Some(_), None) => return false,
-                (None, Some(_)) => return false,
-                (None, None) => break,
-                _ => (),
-            }
+        if self.0 == other.0 {
+            return true;
         }
-
-        true
+        self.bytes().eq(other.bytes())
     }
 }
 
@@ -173,20 +163,7 @@ impl Eq for PctStr {}
 impl PartialEq<str> for PctStr {
     #[inline]
     fn eq(&self, other: &str) -> bool {
-        let mut a = self.chars();
-        let mut b = other.chars();
-
-        loop {
-            match (a.next(), b.next()) {
-                (Some(a), Some(b)) if a != b => return false,
-                (Some(_), None) => return false,
-                (None, Some(_)) => return false,
-                (None, None) => break,
-                _ => (),
-            }
-        }
-
-        true
+        self.bytes().eq(other.as_bytes().iter().copied())
     }
 }
 
@@ -194,20 +171,7 @@ impl PartialEq<str> for PctStr {
 impl PartialEq<PctString> for PctStr {
     #[inline]
     fn eq(&self, other: &PctString) -> bool {
-        let mut a = self.chars();
-        let mut b = other.chars();
-
-        loop {
-            match (a.next(), b.next()) {
-                (Some(a), Some(b)) if a != b => return false,
-                (Some(_), None) => return false,
-                (None, Some(_)) => return false,
-                (None, None) => break,
-                _ => (),
-            }
-        }
-
-        true
+        self == other.as_pct_str()
     }
 }
 
@@ -219,21 +183,7 @@ impl PartialOrd for PctStr {
 
 impl Ord for PctStr {
     fn cmp(&self, other: &PctStr) -> Ordering {
-        let mut self_chars = self.chars();
-        let mut other_chars = other.chars();
-
-        loop {
-            match (self_chars.next(), other_chars.next()) {
-                (None, None) => return Ordering::Equal,
-                (None, Some(_)) => return Ordering::Less,
-                (Some(_), None) => return Ordering::Greater,
-                (Some(a), Some(b)) => match a.cmp(&b) {
-                    Ordering::Less => return Ordering::Less,
-                    Ordering::Greater => return Ordering::Greater,
-                    Ordering::Equal => (),
-                },
-            }
-        }
+        self.bytes().cmp(other.bytes())
     }
 }
 
@@ -247,8 +197,8 @@ impl PartialOrd<PctString> for PctStr {
 impl Hash for PctStr {
     #[inline]
     fn hash<H: Hasher>(&self, hasher: &mut H) {
-        for c in self.chars() {
-            c.hash(hasher)
+        for b in self.bytes() {
+            b.hash(hasher)
         }
     }
 }
