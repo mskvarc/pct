@@ -62,6 +62,15 @@ pub trait Encoder {
     fn ascii_keep_table(&self) -> Option<&'static [u8; 128]> {
         None
     }
+
+    /// Optional 16-byte nibble-shuffle derived from the ASCII keep table
+    /// (see [`crate::scan::build_lo_shuf`]). Enables a fully vectorized keep
+    /// lookup under `feature = "simd"`. Returning `None` falls back to the
+    /// prefilter SIMD variant with a scalar keep-table probe.
+    #[inline]
+    fn ascii_keep_lo_shuf(&self) -> Option<&'static [u8; 16]> {
+        None
+    }
 }
 
 impl<F: Fn(char) -> bool> Encoder for F {

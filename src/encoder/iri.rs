@@ -44,6 +44,16 @@ impl Encoder for IriReserved {
     fn ascii_keep_table(&self) -> Option<&'static [u8; 128]> {
         Some(self.keep_table())
     }
+
+    #[inline]
+    fn ascii_keep_lo_shuf(&self) -> Option<&'static [u8; 16]> {
+        Some(match self {
+            Self::Any => &IRI_LO_SHUF_ANY,
+            Self::Path => &IRI_LO_SHUF_PATH,
+            Self::Query => &IRI_LO_SHUF_QUERY,
+            Self::Fragment => &IRI_LO_SHUF_FRAGMENT,
+        })
+    }
 }
 
 impl IriReserved {
@@ -127,6 +137,11 @@ pub(crate) static IRI_KEEP_ANY: [u8; 128] = build_keep_table(0);
 pub(crate) static IRI_KEEP_PATH: [u8; 128] = build_keep_table(1);
 pub(crate) static IRI_KEEP_QUERY: [u8; 128] = build_keep_table(2);
 pub(crate) static IRI_KEEP_FRAGMENT: [u8; 128] = build_keep_table(3);
+
+pub(crate) static IRI_LO_SHUF_ANY: [u8; 16] = crate::scan::build_lo_shuf(&IRI_KEEP_ANY);
+pub(crate) static IRI_LO_SHUF_PATH: [u8; 16] = crate::scan::build_lo_shuf(&IRI_KEEP_PATH);
+pub(crate) static IRI_LO_SHUF_QUERY: [u8; 16] = crate::scan::build_lo_shuf(&IRI_KEEP_QUERY);
+pub(crate) static IRI_LO_SHUF_FRAGMENT: [u8; 16] = crate::scan::build_lo_shuf(&IRI_KEEP_FRAGMENT);
 
 #[cfg(test)]
 mod tests {

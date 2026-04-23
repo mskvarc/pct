@@ -105,9 +105,10 @@ impl PctString {
         let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
 
         if let Some(table) = encoder.ascii_keep_table() {
+            let lo_shuf = encoder.ascii_keep_lo_shuf();
             let mut i = 0usize;
             while i < bytes.len() {
-                let run_end = scan_keep_run(bytes, i, table);
+                let run_end = scan_keep_run(bytes, i, table, lo_shuf);
                 if run_end > i {
                     out.extend_from_slice(&bytes[i..run_end]);
                     i = run_end;

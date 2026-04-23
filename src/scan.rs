@@ -5,6 +5,31 @@
 //! is plain and can be copied verbatim. The scanners take the keep table as
 //! a parameter so encoders with different reserved sets share the same code.
 
+/// Build a 16-byte nibble-shuffle derived from a 128-entry ASCII keep table.
+///
+/// Each output byte `out[lo]` has bit `hi` set iff `table[(hi << 4) | lo] != 0`
+/// for `hi` in `0..8`. Paired with a high-nibble shuffle mapping `hi` in `0..8`
+/// to `1 << hi` (and `hi` in `8..16` to `0`), two `swizzle_dyn` lookups plus a
+/// bitwise AND reproduce the full 128-entry lookup for any byte, with
+/// non-ASCII bytes (hi >= 8) always landing on the drop side.
+pub(crate) const fn build_lo_shuf(table: &[u8; 128]) -> [u8; 16] {
+    let mut out = [0u8; 16];
+    let mut lo = 0usize;
+    while lo < 16 {
+        let mut bits: u8 = 0;
+        let mut hi = 0u8;
+        while hi < 8 {
+            if table[((hi as usize) << 4) | lo] != 0 {
+                bits |= 1 << hi;
+            }
+            hi += 1;
+        }
+        out[lo] = bits;
+        lo += 1;
+    }
+    out
+}
+
 /// 8-byte unrolled SWAR scanner. Returns the index of the first break byte
 /// at or after `i`, or `bytes.len()` if none.
 #[inline]
@@ -69,29 +94,70 @@ pub(crate) fn scan_keep_run_simd(bytes: &[u8], mut i: usize, table: &[u8; 128]) 
             return i + pct_pos;
         }
         // Prefilter passed: all lanes are ASCII and non-`%`. Check keep table.
-        let mut drop: u32 = 0;
+        // Early-exit on the first declined lane: the return value is the
+        // earliest break, which is exactly the first `k` whose lookup is 0.
+        // A full-mask build would force 16 scalar lookups even when the first
+        // lane is already a drop (catastrophic for break-heavy input).
         for k in 0..LANES {
             if table[bytes[i + k] as usize] == 0 {
-                drop |= 1 << k;
+                return i + k;
             }
-        }
-        if drop != 0 {
-            return i + drop.trailing_zeros() as usize;
         }
         i += LANES;
     }
     scan_keep_run_swar(bytes, i, table)
 }
 
-/// Dispatch entry point. Routes to SIMD under `feature = "simd"`, SWAR otherwise.
+/// 16-lane SIMD scanner using a nibble-shuffle keep-table lookup.
+///
+/// Given `lo_shuf` as produced by [`build_lo_shuf`], two `swizzle_dyn` lookups
+/// plus a bitwise AND produce a per-lane keep bit without any scalar lookups.
+/// Non-ASCII bytes (hi nibble >= 8) always land on the drop side because the
+/// high-nibble shuffle zeroes those positions, so `break_bits` captures
+/// non-ASCII, `%` (encoded as a 0 in every keep table), and table-declined
+/// bytes in a single pass.
+#[cfg(feature = "simd")]
 #[inline]
-pub(crate) fn scan_keep_run(bytes: &[u8], i: usize, table: &[u8; 128]) -> usize {
+pub(crate) fn scan_keep_run_simd_shuf(bytes: &[u8], mut i: usize, table: &[u8; 128], lo_shuf: &[u8; 16]) -> usize {
+    use core::simd::{Simd, cmp::SimdPartialEq};
+    const LANES: usize = 16;
+
+    let hi_lookup: Simd<u8, LANES> = Simd::from_array([1, 2, 4, 8, 16, 32, 64, 128, 0, 0, 0, 0, 0, 0, 0, 0]);
+    let lo_lookup: Simd<u8, LANES> = Simd::from_array(*lo_shuf);
+    let mask_0f: Simd<u8, LANES> = Simd::splat(0x0F);
+    let shr_4: Simd<u8, LANES> = Simd::splat(4);
+    let zero: Simd<u8, LANES> = Simd::splat(0);
+
+    while i + LANES <= bytes.len() {
+        let v: Simd<u8, LANES> = Simd::from_slice(&bytes[i..i + LANES]);
+        let lo_nib = v & mask_0f;
+        let hi_nib = v >> shr_4;
+        let lo_bits = lo_lookup.swizzle_dyn(lo_nib);
+        let hi_bits = hi_lookup.swizzle_dyn(hi_nib);
+        let drop_bits = (lo_bits & hi_bits).simd_eq(zero).to_bitmask();
+        if drop_bits != 0 {
+            return i + drop_bits.trailing_zeros() as usize;
+        }
+        i += LANES;
+    }
+    scan_keep_run_swar(bytes, i, table)
+}
+
+/// Dispatch entry point. Routes to the nibble-shuffle SIMD variant when the
+/// encoder ships a precomputed `lo_shuf`, to the prefilter SIMD variant
+/// otherwise under `feature = "simd"`, and to SWAR when the feature is off.
+#[inline]
+pub(crate) fn scan_keep_run(bytes: &[u8], i: usize, table: &[u8; 128], lo_shuf: Option<&'static [u8; 16]>) -> usize {
     #[cfg(feature = "simd")]
     {
-        scan_keep_run_simd(bytes, i, table)
+        match lo_shuf {
+            Some(ls) => scan_keep_run_simd_shuf(bytes, i, table, ls),
+            None => scan_keep_run_simd(bytes, i, table),
+        }
     }
     #[cfg(not(feature = "simd"))]
     {
+        let _ = lo_shuf;
         scan_keep_run_swar(bytes, i, table)
     }
 }
@@ -164,6 +230,42 @@ mod tests {
             let a = scan_keep_run_simd(&bytes, start, table);
             let b = scan_reference(&bytes, start, table);
             assert_eq!(a, b, "start={}", start);
+        }
+    }
+
+    #[cfg(feature = "simd")]
+    #[test]
+    fn simd_shuf_matches_reference_random() {
+        let table = &crate::encoder::uri::URI_KEEP_ANY;
+        let lo_shuf = build_lo_shuf(table);
+        let mut state: u32 = 0x1234_5678;
+        let mut bytes = vec![0u8; 1024];
+        for b in bytes.iter_mut() {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            *b = (state >> 8) as u8;
+        }
+        for start in 0..bytes.len() {
+            let a = scan_keep_run_simd_shuf(&bytes, start, table, &lo_shuf);
+            let b = scan_reference(&bytes, start, table);
+            assert_eq!(a, b, "start={}", start);
+        }
+    }
+
+    #[test]
+    fn lo_shuf_reproduces_table() {
+        // Verify: for every ASCII byte, nibble-shuffle lookup == scalar table.
+        let table = &crate::encoder::uri::URI_KEEP_ANY;
+        let lo_shuf = build_lo_shuf(table);
+        let hi_shuf: [u8; 16] = [1, 2, 4, 8, 16, 32, 64, 128, 0, 0, 0, 0, 0, 0, 0, 0];
+        for b in 0u8..=127 {
+            let keep_shuf = (lo_shuf[(b & 0x0F) as usize] & hi_shuf[(b >> 4) as usize]) != 0;
+            let keep_tbl = table[b as usize] != 0;
+            assert_eq!(keep_shuf, keep_tbl, "byte {:#x}", b);
+        }
+        // Non-ASCII always drops via hi_shuf zeros.
+        for b in 128u8..=255 {
+            let keep_shuf = (lo_shuf[(b & 0x0F) as usize] & hi_shuf[(b >> 4) as usize]) != 0;
+            assert!(!keep_shuf, "non-ASCII {:#x} must drop", b);
         }
     }
 }
