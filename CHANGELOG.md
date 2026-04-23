@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v4.0.1] - 2026-04-23
+
+### ⚡ Performance
+- Hash optimizations
+
+### 🎨 Style
+- Reformat code
+
+### 🚀 Features
+- Rfc3986 normalization
+
+### 🧹 Chores
+- Bump version
+- Add changelog
+
 ## [v4.0.0] - 2026-04-23
 
 ### ⚡ Performance
