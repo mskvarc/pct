@@ -1,5 +1,4 @@
 use core::{
-    borrow::Borrow,
     cmp::Ordering,
     fmt::{self, Debug, Display, Formatter},
     hash::{Hash, Hasher},
@@ -221,12 +220,6 @@ impl ToOwned for PctStr {
 
     fn to_owned(&self) -> Self::Owned {
         unsafe { PctString::new_unchecked(self.0.to_owned()) }
-    }
-}
-
-impl Borrow<str> for PctStr {
-    fn borrow(&self) -> &str {
-        self.as_str()
     }
 }
 
