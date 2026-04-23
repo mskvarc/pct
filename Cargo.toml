@@ -16,7 +16,7 @@ categories = ["web-programming", "encoding"]
 autobenches = false
 
 [features]
-default = ["std"]
+default = ["std", "memchr"]
 std = ["utf8-decode/std"]
 memchr = ["dep:memchr"]
 
