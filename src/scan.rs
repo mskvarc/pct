@@ -47,8 +47,10 @@ pub(crate) fn scan_keep_run_swar(bytes: &[u8], mut i: usize, table: &[u8; 128]) 
 #[cfg(feature = "simd")]
 #[inline]
 pub(crate) fn scan_keep_run_simd(bytes: &[u8], mut i: usize, table: &[u8; 128]) -> usize {
-    use core::simd::cmp::{SimdPartialEq, SimdPartialOrd};
-    use core::simd::Simd;
+    use core::simd::{
+        Simd,
+        cmp::{SimdPartialEq, SimdPartialOrd},
+    };
     const LANES: usize = 16;
 
     while i + LANES <= bytes.len() {

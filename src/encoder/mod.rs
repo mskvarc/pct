@@ -52,11 +52,7 @@ pub trait Encoder {
     /// fall back to `encode(b as char)`.
     #[inline]
     fn encode_ascii(&self, b: u8) -> Option<bool> {
-        if b < 0x80 {
-            Some(self.encode(b as char))
-        } else {
-            None
-        }
+        if b < 0x80 { Some(self.encode(b as char)) } else { None }
     }
 
     /// Optional pointer to a 128-entry ASCII keep table, where `table[b] != 0`

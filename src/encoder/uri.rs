@@ -79,13 +79,10 @@ const fn build_keep_table(variant: u8) -> [u8; 128] {
             | b'_'
             | b'~'
         );
-        let sub_delim = matches!(
-            b,
-            b'!' | b'$' | b'&' | b'\'' | b'(' | b')' | b'*' | b'+' | b',' | b';' | b'='
-        );
+        let sub_delim = matches!(b, b'!' | b'$' | b'&' | b'\'' | b'(' | b')' | b'*' | b'+' | b',' | b';' | b'=');
         let safe = match variant {
-            0 => false, // Any
-            1 => sub_delim || b == b'@', // Path
+            0 => false,                                                   // Any
+            1 => sub_delim || b == b'@',                                  // Path
             2 | 3 => sub_delim || matches!(b, b':' | b'@' | b'/' | b'?'), // Query/Fragment
             _ => false,
         };

@@ -131,10 +131,7 @@ impl PctString {
                     }
                     let seq = &bytes[start..i];
                     // SAFETY: `src` is `&str`, so `seq` is a valid UTF-8 sequence.
-                    let c = unsafe { core::str::from_utf8_unchecked(seq) }
-                        .chars()
-                        .next()
-                        .unwrap();
+                    let c = unsafe { core::str::from_utf8_unchecked(seq) }.chars().next().unwrap();
                     if encoder.encode(c) {
                         for &byte in seq {
                             out.push(b'%');
