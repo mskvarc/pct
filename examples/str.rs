@@ -1,6 +1,4 @@
-extern crate pct_str;
-
-use pct_str::{InvalidPctString, PctStr};
+use pct::{InvalidPctString, PctStr};
 
 fn main() -> Result<(), InvalidPctString<&'static str>> {
     // [`PctStr`] is the equivalent of [`str`] for percent-encoded strings.

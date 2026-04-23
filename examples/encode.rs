@@ -1,10 +1,8 @@
-extern crate pct_str;
-
-use pct_str::{PctString, UriReserved};
+use pct::{PctString, UriReserved};
 
 struct CustomEncoder;
 
-impl pct_str::Encoder for CustomEncoder {
+impl pct::Encoder for CustomEncoder {
     fn encode(&self, c: char) -> bool {
         UriReserved::Any.encode(c) || c.is_uppercase()
     }

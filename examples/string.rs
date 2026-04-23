@@ -1,6 +1,4 @@
-extern crate pct_str;
-
-use pct_str::{InvalidPctString, PctStr, PctString};
+use pct::{InvalidPctString, PctStr, PctString};
 
 fn main() -> Result<(), InvalidPctString<String>> {
     // [`PctString`] is the equivalent of [`String`] for
