@@ -34,6 +34,30 @@ impl Encoder for IriReserved {
     fn encode(&self, c: char) -> bool {
         !is_iunreserved(c) && !self.is_reserved_but_safe(c)
     }
+
+    #[inline]
+    fn encode_ascii(&self, b: u8) -> Option<bool> {
+        Some(self.keep_table()[b as usize] == 0)
+    }
+
+    #[inline]
+    fn ascii_keep_table(&self) -> Option<&'static [u8; 128]> {
+        Some(self.keep_table())
+    }
+}
+
+impl IriReserved {
+    #[inline]
+    fn keep_table(&self) -> &'static [u8; 128] {
+        // ASCII rules coincide with URI because ucschar / iprivate are
+        // strictly non-ASCII.
+        match self {
+            Self::Any => &IRI_KEEP_ANY,
+            Self::Path => &IRI_KEEP_PATH,
+            Self::Query => &IRI_KEEP_QUERY,
+            Self::Fragment => &IRI_KEEP_FRAGMENT,
+        }
+    }
 }
 
 fn is_sub_delim(c: char) -> bool {
@@ -70,11 +94,48 @@ fn is_ucschar(c: char) -> bool {
     )
 }
 
+const fn build_keep_table(variant: u8) -> [u8; 128] {
+    let mut t = [0u8; 128];
+    let mut i = 0u16;
+    while i < 128 {
+        let b = i as u8;
+        let unreserved = matches!(
+            b,
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'.'
+            | b'_'
+            | b'~'
+        );
+        let sub_delim = matches!(
+            b,
+            b'!' | b'$' | b'&' | b'\'' | b'(' | b')' | b'*' | b'+' | b',' | b';' | b'='
+        );
+        let safe = match variant {
+            0 => false, // Any
+            1 => sub_delim || b == b'@', // Path
+            2 | 3 => sub_delim || matches!(b, b':' | b'@' | b'/' | b'?'), // Query/Fragment
+            _ => false,
+        };
+        let keep = unreserved || safe;
+        t[i as usize] = if keep && b != b'%' { 1 } else { 0 };
+        i += 1;
+    }
+    t
+}
+
+pub(crate) static IRI_KEEP_ANY: [u8; 128] = build_keep_table(0);
+pub(crate) static IRI_KEEP_PATH: [u8; 128] = build_keep_table(1);
+pub(crate) static IRI_KEEP_QUERY: [u8; 128] = build_keep_table(2);
+pub(crate) static IRI_KEEP_FRAGMENT: [u8; 128] = build_keep_table(3);
+
 #[cfg(test)]
 mod tests {
     use crate::PctString;
 
-    use super::IriReserved;
+    use super::*;
 
     #[test]
     fn iri_encode_cyrillic() {
@@ -115,5 +176,17 @@ mod tests {
         let pct_string = PctString::encode("?test=традиционное польское блюдо&cjk=真正&private=\u{10FFFD}".chars(), encoder);
         assert_eq!(&pct_string, &"?test=традиционное польское блюдо&cjk=真正&private=\u{10FFFD}");
         assert_eq!(&pct_string.as_str(), &"?test=традиционное%20польское%20блюдо&cjk=真正&private=\u{10FFFD}");
+    }
+
+    #[test]
+    fn keep_table_matches_encode() {
+        for variant in [IriReserved::Any, IriReserved::Path, IriReserved::Query, IriReserved::Fragment] {
+            for b in 0u8..128 {
+                let from_table = variant.ascii_keep_table().unwrap()[b as usize] != 0;
+                let from_encode = !variant.encode(b as char);
+                let expected = from_encode && b != b'%';
+                assert_eq!(from_table, expected, "variant {:?} byte {:#x}", variant, b);
+            }
+        }
     }
 }

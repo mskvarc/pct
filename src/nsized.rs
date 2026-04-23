@@ -6,7 +6,7 @@ use core::{
 
 use crate::{
     InvalidPctString,
-    util::{TryEncodedBytes, find_percent, to_digit},
+    util::{HEX_VAL, TryEncodedBytes, find_percent},
 };
 
 #[cfg(feature = "std")]
@@ -248,11 +248,11 @@ impl<'a> Iterator for Bytes<'a> {
             match next {
                 b'%' => {
                     let a = self.0.next().copied().unwrap();
-                    let a = to_digit(a).unwrap();
                     let b = self.0.next().copied().unwrap();
-                    let b = to_digit(b).unwrap();
-                    let byte = a << 4 | b;
-                    Some(byte)
+                    let ah = HEX_VAL[a as usize];
+                    let bh = HEX_VAL[b as usize];
+                    debug_assert!(ah != 0xFF && bh != 0xFF, "PctStr invariant: valid hex");
+                    Some((ah << 4) | bh)
                 }
                 _ => Some(next),
             }

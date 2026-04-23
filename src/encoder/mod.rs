@@ -44,6 +44,28 @@ pub trait Encoder {
     ///
     /// Note that the character `%` is always encoded even if this method returns `false` on it.
     fn encode(&self, c: char) -> bool;
+
+    /// Fast-path decision for a single ASCII byte (`b < 0x80`).
+    ///
+    /// Returns `Some(must_encode)` if the encoder can answer from an ASCII
+    /// lookup table without going through `char` conversion; `None` means
+    /// fall back to `encode(b as char)`.
+    #[inline]
+    fn encode_ascii(&self, b: u8) -> Option<bool> {
+        if b < 0x80 {
+            Some(self.encode(b as char))
+        } else {
+            None
+        }
+    }
+
+    /// Optional pointer to a 128-entry ASCII keep table, where `table[b] != 0`
+    /// means byte `b` does NOT need encoding. `None` means the encoder has no
+    /// byte-level table and a scalar loop is used.
+    #[inline]
+    fn ascii_keep_table(&self) -> Option<&'static [u8; 128]> {
+        None
+    }
 }
 
 impl<F: Fn(char) -> bool> Encoder for F {

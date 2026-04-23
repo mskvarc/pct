@@ -14,17 +14,23 @@ pub(crate) fn find_percent(bytes: &[u8]) -> Option<usize> {
     }
 }
 
-#[inline(always)]
-pub fn to_digit(b: u8) -> Result<u8, ByteError> {
-    match b {
-        // ASCII 0..=9
-        0x30..=0x39 => Ok(b - 0x30),
-        // ASCII A..=F
-        0x41..=0x46 => Ok(b - 0x37),
-        // ASCII a..=f
-        0x61..=0x66 => Ok(b - 0x57),
-        _ => Err(ByteError::InvalidByte(b)),
+/// Lookup table: byte → hex nibble value (`0..=15`), or `0xFF` for non-hex bytes.
+pub(crate) static HEX_VAL: [u8; 256] = build_hex_val();
+
+const fn build_hex_val() -> [u8; 256] {
+    let mut t = [0xFFu8; 256];
+    let mut i = 0u16;
+    while i < 256 {
+        let b = i as u8;
+        t[i as usize] = match b {
+            b'0'..=b'9' => b - b'0',
+            b'A'..=b'F' => b - b'A' + 10,
+            b'a'..=b'f' => b - b'a' + 10,
+            _ => 0xFF,
+        };
+        i += 1;
     }
+    t
 }
 
 #[derive(Debug, Clone)]
@@ -68,11 +74,15 @@ impl<B: Iterator<Item = u8>> TryEncodedBytes<B> {
         match next {
             b'%' => {
                 let a = self.0.next().ok_or(ByteError::IncompleteEncoding)?;
-                let a = to_digit(a)?;
                 let b = self.0.next().ok_or(ByteError::IncompleteEncoding)?;
-                let b = to_digit(b)?;
-                let byte = a << 4 | b;
-                Ok(byte)
+                let ah = HEX_VAL[a as usize];
+                let bh = HEX_VAL[b as usize];
+                // Valid hex nibbles are 0..=15; invalid nibbles are 0xFF. If
+                // either is 0xFF, the OR is 0xFF.
+                if ah | bh == 0xFF {
+                    return Err(ByteError::InvalidByte(if ah == 0xFF { a } else { b }));
+                }
+                Ok((ah << 4) | bh)
             }
             _ => Ok(next),
         }
