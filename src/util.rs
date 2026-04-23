@@ -2,6 +2,18 @@ use core::fmt::{self, Display, Formatter};
 
 use utf8_decode::Utf8Error;
 
+#[inline]
+pub(crate) fn find_percent(bytes: &[u8]) -> Option<usize> {
+    #[cfg(feature = "memchr")]
+    {
+        memchr::memchr(b'%', bytes)
+    }
+    #[cfg(not(feature = "memchr"))]
+    {
+        bytes.iter().position(|&b| b == b'%')
+    }
+}
+
 #[inline(always)]
 pub fn to_digit(b: u8) -> Result<u8, ByteError> {
     match b {
