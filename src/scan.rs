@@ -36,11 +36,62 @@ pub(crate) fn scan_keep_run_swar(bytes: &[u8], mut i: usize, table: &[u8; 128]) 
     i
 }
 
-/// Dispatch entry point — identical to the SWAR variant for now; Phase 4
-/// swaps in a SIMD implementation under `cfg(feature = "simd")`.
+/// 16-lane portable-SIMD prefilter. Same contract as [`scan_keep_run_swar`].
+///
+/// The SIMD pass only checks the two "class" conditions that can be expressed
+/// as simple byte-vector comparisons — `byte >= 0x80` and `byte == b'%'`.
+/// The per-encoder 128-entry keep table is still consulted scalarly, but only
+/// for the lanes that made it past the prefilter and inside the lane that
+/// triggered the break. In practice plain-heavy inputs stay in the 16-byte
+/// stride and the scalar table lookups are loop-unrolled by the optimizer.
+#[cfg(feature = "simd")]
+#[inline]
+pub(crate) fn scan_keep_run_simd(bytes: &[u8], mut i: usize, table: &[u8; 128]) -> usize {
+    use core::simd::cmp::{SimdPartialEq, SimdPartialOrd};
+    use core::simd::Simd;
+    const LANES: usize = 16;
+
+    while i + LANES <= bytes.len() {
+        let v: Simd<u8, LANES> = Simd::from_slice(&bytes[i..i + LANES]);
+        let non_ascii = v.simd_ge(Simd::splat(0x80));
+        let is_pct = v.simd_eq(Simd::splat(b'%'));
+        let break_bits = (non_ascii | is_pct).to_bitmask();
+        if break_bits != 0 {
+            let pct_pos = break_bits.trailing_zeros() as usize;
+            // A table-declined ASCII byte before `pct_pos` still wins.
+            for k in 0..pct_pos {
+                if table[bytes[i + k] as usize] == 0 {
+                    return i + k;
+                }
+            }
+            return i + pct_pos;
+        }
+        // Prefilter passed: all lanes are ASCII and non-`%`. Check keep table.
+        let mut drop: u32 = 0;
+        for k in 0..LANES {
+            if table[bytes[i + k] as usize] == 0 {
+                drop |= 1 << k;
+            }
+        }
+        if drop != 0 {
+            return i + drop.trailing_zeros() as usize;
+        }
+        i += LANES;
+    }
+    scan_keep_run_swar(bytes, i, table)
+}
+
+/// Dispatch entry point. Routes to SIMD under `feature = "simd"`, SWAR otherwise.
 #[inline]
 pub(crate) fn scan_keep_run(bytes: &[u8], i: usize, table: &[u8; 128]) -> usize {
-    scan_keep_run_swar(bytes, i, table)
+    #[cfg(feature = "simd")]
+    {
+        scan_keep_run_simd(bytes, i, table)
+    }
+    #[cfg(not(feature = "simd"))]
+    {
+        scan_keep_run_swar(bytes, i, table)
+    }
 }
 
 #[cfg(test)]
@@ -95,5 +146,22 @@ mod tests {
         let table = &crate::encoder::uri::URI_KEEP_ANY;
         let bytes = b"abc\xC3\xA9xyz";
         assert_eq!(scan_keep_run_swar(bytes, 0, table), 3);
+    }
+
+    #[cfg(feature = "simd")]
+    #[test]
+    fn simd_matches_reference_random() {
+        let table = &crate::encoder::uri::URI_KEEP_ANY;
+        let mut state: u32 = 0x1234_5678;
+        let mut bytes = vec![0u8; 1024];
+        for b in bytes.iter_mut() {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            *b = (state >> 8) as u8;
+        }
+        for start in 0..bytes.len() {
+            let a = scan_keep_run_simd(&bytes, start, table);
+            let b = scan_reference(&bytes, start, table);
+            assert_eq!(a, b, "start={}", start);
+        }
     }
 }

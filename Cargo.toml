@@ -19,6 +19,8 @@ autobenches = false
 default = ["std", "memchr"]
 std = ["utf8-decode/std"]
 memchr = ["dep:memchr"]
+# Portable-SIMD scanner. Requires nightly rustc (enables `portable_simd`).
+simd = []
 
 [dependencies]
 utf8-decode = { version = "2.0.0", default-features = false }

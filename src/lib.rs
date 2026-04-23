@@ -53,10 +53,14 @@
 //! [`PctString`]: crate::sized::PctString
 //! [`Encoder`]: crate::encoder::Encoder
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(feature = "simd", feature(portable_simd))]
 
 pub(crate) mod encoder;
 mod error;
 mod nsized;
+// The scanner is only used from the `std`-gated `encode_bytes`; silence unused
+// warnings when std is disabled.
+#[cfg_attr(not(feature = "std"), allow(dead_code))]
 pub(crate) mod scan;
 #[cfg(feature = "std")]
 mod sized;
