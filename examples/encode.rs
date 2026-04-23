@@ -15,12 +15,12 @@ fn main() {
     // characters to encode.
     let pct_string = PctString::encode("Hello World!".chars(), UriReserved::Any);
     // [`URIReserved`] is a predefined encoder for URI-reserved characters.
-    assert_eq!(pct_string.as_str(), "Hello World%21");
+    assert_eq!(pct_string.as_str(), "Hello%20World%21");
 
     // You can create your own encoder by implementing the [`Encoder`] trait.
     let pct_string = PctString::encode("Hello World!".chars(), CustomEncoder);
     println!("{}", pct_string.as_str());
-    assert_eq!(pct_string.as_str(), "%48ello %57orld%21");
+    assert_eq!(pct_string.as_str(), "%48ello%20%57orld%21");
 
     // You can also use any function implementing `Fn(char) -> bool`.
     let pct_string = PctString::encode("Hello World!".chars(), char::is_uppercase);
