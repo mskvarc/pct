@@ -292,8 +292,30 @@ impl PartialOrd<PctString> for PctStr {
 impl Hash for PctStr {
     #[inline]
     fn hash<H: Hasher>(&self, hasher: &mut H) {
-        for b in self.bytes() {
-            b.hash(hasher)
+        let bytes: &[u8] = &self.0;
+        #[cfg(feature = "memchr")]
+        {
+            if find_percent(bytes).is_none() {
+                hasher.write(bytes);
+                return;
+            }
+            let mut prev = 0usize;
+            for pct in memchr::memchr_iter(b'%', bytes) {
+                hasher.write(&bytes[prev..pct]);
+                // SAFETY-ish: PctStr invariant guarantees %XX with valid hex.
+                let a = crate::util::HEX_VAL[bytes[pct + 1] as usize];
+                let b = crate::util::HEX_VAL[bytes[pct + 2] as usize];
+                debug_assert!(a != 0xFF && b != 0xFF);
+                hasher.write(&[(a << 4) | b]);
+                prev = pct + 3;
+            }
+            hasher.write(&bytes[prev..]);
+        }
+        #[cfg(not(feature = "memchr"))]
+        {
+            for b in self.bytes() {
+                b.hash(hasher)
+            }
         }
     }
 }
