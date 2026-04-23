@@ -63,7 +63,7 @@ impl PctString {
     /// # Example
     ///
     /// ```
-    /// use pct_str::{PctString, UriReserved};
+    /// use pct::{PctString, UriReserved};
     ///
     /// let pct_string = PctString::encode("Hello World!".chars(), UriReserved::Any);
     /// println!("{}", pct_string.as_str()); // => Hello World%21

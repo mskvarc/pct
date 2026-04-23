@@ -17,7 +17,7 @@ pub use uri::*;
 /// # Example
 ///
 /// ```
-/// use pct_str::{PctString, UriReserved};
+/// use pct::{PctString, UriReserved};
 ///
 /// let pct_string = PctString::encode("Hello World!".chars(), UriReserved::Any);
 /// println!("{}", pct_string.as_str()); // => Hello World%21
@@ -26,11 +26,11 @@ pub use uri::*;
 /// Custom encoder implementation:
 ///
 /// ```
-/// use pct_str::{PctString, UriReserved};
+/// use pct::{PctString, UriReserved};
 ///
 /// struct CustomEncoder;
 ///
-/// impl pct_str::Encoder for CustomEncoder {
+/// impl pct::Encoder for CustomEncoder {
 ///   fn encode(&self, c: char) -> bool {
 ///     UriReserved::Any.encode(c) || c.is_uppercase()
 ///   }

@@ -16,7 +16,7 @@ You can use them to encode, decode and compare percent-encoded strings.
 You can parse/decode percent-encoded strings by building a [`PctStr`] slice over a `str` slice.
 
 ```rust
-use pct_str::PctStr;
+use pct::PctStr;
 
 let pct_str = PctStr::new("Hello%20World%21").unwrap();
 assert_eq!(pct_str, "Hello World!");
@@ -28,7 +28,7 @@ assert_eq!(decoded_string, "Hello World!")
 To create new percent-encoded strings, use the [`PctString`] to copy or encode new strings.
 
 ```rust
-use pct_str::{PctString, UriReserved};
+use pct::{PctString, UriReserved};
 
 // Copy the given percent-encoded string.
 let pct_string = PctString::new("Hello%20World%21").unwrap();
@@ -43,11 +43,11 @@ You can choose which character will be percent-encoded by the `encode` function
 by implementing the [`Encoder`] trait.
 
 ```rust
-use pct_str::{UriReserved, PctString};
+use pct::{UriReserved, PctString};
 
 struct CustomEncoder;
 
-impl pct_str::Encoder for CustomEncoder {
+impl pct::Encoder for CustomEncoder {
   fn encode(&self, c: char) -> bool {
     UriReserved::Any.encode(c) || c.is_uppercase()
   }

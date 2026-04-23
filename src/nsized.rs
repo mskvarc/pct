@@ -22,7 +22,7 @@ use crate::PctString;
 /// # Examples
 ///
 /// ```
-/// use pct_str::PctStr;
+/// use pct::PctStr;
 ///
 /// let buffer = "Hello%20World%21";
 /// let pct_str = PctStr::new(buffer).unwrap();
