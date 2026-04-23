@@ -7,7 +7,7 @@ use core::{
 
 use crate::{
     InvalidPctString,
-    util::{TryEncodedBytes, to_digit},
+    util::{TryEncodedBytes, find_percent, to_digit},
 };
 
 #[cfg(feature = "std")]
@@ -54,6 +54,12 @@ impl PctStr {
     /// If the test fails, a [`InvalidPctString`] error is returned.
     pub fn new<S: AsRef<[u8]> + ?Sized>(input: &S) -> Result<&PctStr, InvalidPctString<&S>> {
         let input_bytes = input.as_ref();
+        if find_percent(input_bytes).is_none() {
+            return match core::str::from_utf8(input_bytes) {
+                Ok(_) => Ok(unsafe { Self::new_unchecked(input_bytes) }),
+                Err(_) => Err(InvalidPctString(input)),
+            };
+        }
         if Self::validate(input_bytes.iter().copied()) {
             Ok(unsafe { Self::new_unchecked(input_bytes) })
         } else {
@@ -128,12 +134,17 @@ impl PctStr {
     /// Return the string with the percent-encoded characters decoded.
     #[cfg(feature = "std")]
     pub fn decode(&self) -> String {
-        let mut decoded = String::with_capacity(self.len());
-        for c in self.chars() {
-            decoded.push(c)
+        if find_percent(&self.0).is_none() {
+            return self.as_str().to_owned();
         }
-
-        decoded
+        let mut decoded = Vec::with_capacity(self.0.len());
+        for b in self.bytes() {
+            decoded.push(b);
+        }
+        unsafe {
+            // SAFETY: decoded bytes form valid UTF-8 because `validate` passed.
+            String::from_utf8_unchecked(decoded)
+        }
     }
 }
 

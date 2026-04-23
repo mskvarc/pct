@@ -6,7 +6,7 @@ use std::{
     str::FromStr,
 };
 
-use crate::{Encoder, InvalidPctString, PctStr};
+use crate::{Encoder, InvalidPctString, PctStr, util::find_percent};
 
 /// Owned, mutable percent-encoded string.
 ///
@@ -22,6 +22,12 @@ impl PctString {
     /// If the test fails, a [`InvalidPctString`] error is returned.
     pub fn new<B: Into<Vec<u8>>>(bytes: B) -> Result<Self, InvalidPctString<Vec<u8>>> {
         let bytes = bytes.into();
+        if find_percent(&bytes).is_none() {
+            return match core::str::from_utf8(&bytes) {
+                Ok(_) => Ok(Self(bytes)),
+                Err(_) => Err(InvalidPctString(bytes)),
+            };
+        }
         if PctStr::validate(bytes.iter().copied()) {
             Ok(Self(bytes))
         } else {
