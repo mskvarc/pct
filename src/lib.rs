@@ -54,9 +54,10 @@
 //! [`Encoder`]: crate::encoder::Encoder
 #![cfg_attr(not(feature = "std"), no_std)]
 
-mod encoder;
+pub(crate) mod encoder;
 mod error;
 mod nsized;
+pub(crate) mod scan;
 #[cfg(feature = "std")]
 mod sized;
 pub(crate) mod util;

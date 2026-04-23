@@ -6,7 +6,7 @@ use std::{
     str::FromStr,
 };
 
-use crate::{Encoder, InvalidPctString, PctStr, util::find_percent};
+use crate::{Encoder, InvalidPctString, PctStr, scan::scan_keep_run, util::find_percent};
 
 /// Owned, mutable percent-encoded string.
 ///
@@ -86,6 +86,82 @@ impl PctString {
                 out.push(c as u8);
             } else {
                 out.extend_from_slice(c.encode_utf8(&mut ubuf).as_bytes());
+            }
+        }
+
+        PctString(out)
+    }
+
+    /// Byte-oriented encode path.
+    ///
+    /// Walks the input as bytes, skipping 8-byte plain runs via SWAR when the
+    /// encoder exposes an ASCII keep table (`UriReserved`, `IriReserved`),
+    /// and falls back to the per-char loop otherwise. Multi-byte UTF-8
+    /// sequences are handled in one batch.
+    pub fn encode_bytes<E: Encoder>(src: &str, encoder: E) -> PctString {
+        static HEX: &[u8; 16] = b"0123456789ABCDEF";
+
+        let bytes = src.as_bytes();
+        let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+
+        if let Some(table) = encoder.ascii_keep_table() {
+            let mut i = 0usize;
+            while i < bytes.len() {
+                let run_end = scan_keep_run(bytes, i, table);
+                if run_end > i {
+                    out.extend_from_slice(&bytes[i..run_end]);
+                    i = run_end;
+                    if i >= bytes.len() {
+                        break;
+                    }
+                }
+                let b = bytes[i];
+                if b < 0x80 {
+                    // Break byte: `%` or a table-declined ASCII byte.
+                    out.push(b'%');
+                    out.push(HEX[(b >> 4) as usize]);
+                    out.push(HEX[(b & 0x0F) as usize]);
+                    i += 1;
+                } else {
+                    // Multi-byte UTF-8 sequence starts here.
+                    let start = i;
+                    i += 1;
+                    while i < bytes.len() && (bytes[i] & 0xC0) == 0x80 {
+                        i += 1;
+                    }
+                    let seq = &bytes[start..i];
+                    // SAFETY: `src` is `&str`, so `seq` is a valid UTF-8 sequence.
+                    let c = unsafe { core::str::from_utf8_unchecked(seq) }
+                        .chars()
+                        .next()
+                        .unwrap();
+                    if encoder.encode(c) {
+                        for &byte in seq {
+                            out.push(b'%');
+                            out.push(HEX[(byte >> 4) as usize]);
+                            out.push(HEX[(byte & 0x0F) as usize]);
+                        }
+                    } else {
+                        out.extend_from_slice(seq);
+                    }
+                }
+            }
+        } else {
+            // Custom encoder without a keep table → per-char fallback.
+            let mut ubuf = [0u8; 4];
+            for c in src.chars() {
+                if encoder.encode(c) || c == '%' {
+                    let s = c.encode_utf8(&mut ubuf);
+                    for &b in s.as_bytes() {
+                        out.push(b'%');
+                        out.push(HEX[(b >> 4) as usize]);
+                        out.push(HEX[(b & 0x0F) as usize]);
+                    }
+                } else if c.is_ascii() {
+                    out.push(c as u8);
+                } else {
+                    out.extend_from_slice(c.encode_utf8(&mut ubuf).as_bytes());
+                }
             }
         }
 
@@ -240,5 +316,50 @@ impl<'a> TryFrom<&'a str> for &'a PctStr {
 
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
         PctStr::new(value)
+    }
+}
+
+#[cfg(test)]
+mod encode_bytes_tests {
+    use super::*;
+    use crate::{IriReserved, UriReserved};
+
+    fn check<E: Encoder + Copy>(src: &str, enc: E) {
+        let per_char = PctString::encode(src.chars(), enc);
+        let byte_path = PctString::encode_bytes(src, enc);
+        assert_eq!(per_char.as_str(), byte_path.as_str(), "src={:?}", src);
+    }
+
+    #[test]
+    fn parity_ascii_mixed() {
+        check("Hello, world!", UriReserved::Any);
+        check("foo/bar?baz=qux&x=y", UriReserved::Path);
+        check("abc 123 !@#$%^&*()", UriReserved::Query);
+        check("", UriReserved::Any);
+        check("%already%encoded%20", UriReserved::Any);
+    }
+
+    #[test]
+    fn parity_unicode() {
+        check("традиционное польское блюдо", UriReserved::Any);
+        check("中文 日本語 한국어", UriReserved::Any);
+        check("😀🚀🌍", UriReserved::Any);
+        check("традиционное польское блюдо", IriReserved::Path);
+        check("?test=中文&private=\u{10FFFD}", IriReserved::Query);
+        check("?test=中文&private=\u{10FFFD}", IriReserved::Fragment);
+    }
+
+    #[test]
+    fn parity_custom_encoder() {
+        struct UppercaseToo;
+        impl Encoder for UppercaseToo {
+            fn encode(&self, c: char) -> bool {
+                UriReserved::Any.encode(c) || c.is_uppercase()
+            }
+        }
+        let src = "Hello World!";
+        let per_char = PctString::encode(src.chars(), UppercaseToo);
+        let byte_path = PctString::encode_bytes(src, UppercaseToo);
+        assert_eq!(per_char.as_str(), byte_path.as_str());
     }
 }

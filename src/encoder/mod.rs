@@ -1,5 +1,5 @@
-mod iri;
-mod uri;
+pub(crate) mod iri;
+pub(crate) mod uri;
 
 pub use iri::*;
 pub use uri::*;

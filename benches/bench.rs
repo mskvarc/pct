@@ -95,6 +95,25 @@ fn bench_encode(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("utf8", size), &utf8, |b, s| {
             b.iter(|| PctString::encode(black_box(s).chars(), UriReserved::Any))
         });
+
+        // Byte-oriented path (Phase 3): walks the input as bytes, using the
+        // encoder's ASCII keep table + SWAR plain-run skip.
+        group.throughput(Throughput::Bytes(unr.len() as u64));
+        group.bench_with_input(BenchmarkId::new("unreserved_bytes", size), &unr, |b, s| {
+            b.iter(|| PctString::encode_bytes(black_box(s.as_str()), UriReserved::Any))
+        });
+        group.throughput(Throughput::Bytes(must.len() as u64));
+        group.bench_with_input(BenchmarkId::new("must_encode_bytes", size), &must, |b, s| {
+            b.iter(|| PctString::encode_bytes(black_box(s.as_str()), UriReserved::Any))
+        });
+        group.throughput(Throughput::Bytes(mix.len() as u64));
+        group.bench_with_input(BenchmarkId::new("mixed_bytes", size), &mix, |b, s| {
+            b.iter(|| PctString::encode_bytes(black_box(s.as_str()), UriReserved::Any))
+        });
+        group.throughput(Throughput::Bytes(utf8.len() as u64));
+        group.bench_with_input(BenchmarkId::new("utf8_bytes", size), &utf8, |b, s| {
+            b.iter(|| PctString::encode_bytes(black_box(s.as_str()), UriReserved::Any))
+        });
     }
     group.finish();
 }
