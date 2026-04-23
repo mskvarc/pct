@@ -68,24 +68,28 @@ impl PctString {
     /// let pct_string = PctString::encode("Hello World!".chars(), UriReserved::Any);
     /// println!("{}", pct_string.as_str()); // => Hello World%21
     /// ```
-    pub fn encode<E: Encoder>(src: impl Iterator<Item = char>, encoder: E) -> PctString {
-        use std::fmt::Write;
+    pub fn encode<E: Encoder>(src: impl IntoIterator<Item = char>, encoder: E) -> PctString {
+        static HEX: &[u8; 16] = b"0123456789ABCDEF";
 
-        let mut buf = String::with_capacity(4);
-        let mut encoded = String::new();
-        for c in src {
+        let iter = src.into_iter();
+        let mut out = Vec::with_capacity(iter.size_hint().0);
+        let mut ubuf = [0u8; 4];
+        for c in iter {
             if encoder.encode(c) || c == '%' {
-                buf.clear();
-                buf.push(c);
-                for byte in buf.bytes() {
-                    write!(encoded, "%{:02X}", byte).unwrap();
+                let s = c.encode_utf8(&mut ubuf);
+                for &b in s.as_bytes() {
+                    out.push(b'%');
+                    out.push(HEX[(b >> 4) as usize]);
+                    out.push(HEX[(b & 0x0F) as usize]);
                 }
+            } else if c.is_ascii() {
+                out.push(c as u8);
             } else {
-                encoded.push(c);
+                out.extend_from_slice(c.encode_utf8(&mut ubuf).as_bytes());
             }
         }
 
-        PctString(encoded.into_bytes())
+        PctString(out)
     }
 
     /// Return this string as a borrowed percent-encoded string slice.
