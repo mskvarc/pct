@@ -581,12 +581,7 @@ mod rfc3986_tests {
 
     #[test]
     fn hash_matches_eq() {
-        let pairs: &[(&str, &str)] = &[
-            ("%7Eb", "~b"),
-            ("%2f", "%2F"),
-            ("abc", "abc"),
-            ("%2Fb", "%2fb"),
-        ];
+        let pairs: &[(&str, &str)] = &[("%7Eb", "~b"), ("%2f", "%2F"), ("abc", "abc"), ("%2Fb", "%2fb")];
         for (x, y) in pairs {
             let a = PctStr::new(x).unwrap();
             let b = PctStr::new(y).unwrap();
