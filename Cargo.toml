@@ -21,3 +21,10 @@ std = ["utf8-decode/std"]
 
 [dependencies]
 utf8-decode = { version = "2.0.0", default-features = false }
+
+[dev-dependencies]
+criterion = "0.8.2"
+
+[[bench]]
+name = "bench"
+harness = false
