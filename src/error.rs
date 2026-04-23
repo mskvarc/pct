@@ -7,20 +7,20 @@ use core::fmt::{self, Display, Formatter};
 pub struct InvalidPctString<T>(pub T);
 
 impl<T> Display for InvalidPctString<T> {
-	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-		f.write_str("invalid percent-encoded string")
-	}
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("invalid percent-encoded string")
+    }
 }
 
 impl<T> InvalidPctString<T> {
-	pub fn map<U>(self, f: impl FnOnce(T) -> U) -> InvalidPctString<U> {
-		InvalidPctString(f(self.0))
-	}
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> InvalidPctString<U> {
+        InvalidPctString(f(self.0))
+    }
 }
 
 #[cfg(feature = "std")]
 impl<T: ?Sized + ToOwned> InvalidPctString<&T> {
-	pub fn into_owned(self) -> InvalidPctString<T::Owned> {
-		self.map(T::to_owned)
-	}
+    pub fn into_owned(self) -> InvalidPctString<T::Owned> {
+        self.map(T::to_owned)
+    }
 }

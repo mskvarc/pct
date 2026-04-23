@@ -69,49 +69,49 @@ pub use sized::*;
 
 #[cfg(test)]
 mod tests {
-	use std::convert::TryInto;
+    use std::convert::TryInto;
 
-	use super::*;
+    use super::*;
 
-	#[test]
-	fn pct_encoding_invalid() {
-		let s = "%FF%FE%20%4F";
-		assert!(PctStr::new(s).is_err());
-		let s = "%36%A";
-		assert!(PctStr::new(s).is_err());
-		let s = "%%32";
-		assert!(PctStr::new(s).is_err());
-		let s = "%%32";
-		assert!(PctStr::new(s).is_err());
-	}
+    #[test]
+    fn pct_encoding_invalid() {
+        let s = "%FF%FE%20%4F";
+        assert!(PctStr::new(s).is_err());
+        let s = "%36%A";
+        assert!(PctStr::new(s).is_err());
+        let s = "%%32";
+        assert!(PctStr::new(s).is_err());
+        let s = "%%32";
+        assert!(PctStr::new(s).is_err());
+    }
 
-	#[test]
-	fn pct_encoding_valid() {
-		let s = "%00%5C%F4%8F%BF%BD%69";
-		assert!(PctStr::new(s).is_ok());
-		let s = "No percent.";
-		assert!(PctStr::new(s).is_ok());
-		let s = "%e2%82%acwat";
-		assert!(PctStr::new(s).is_ok());
-	}
+    #[test]
+    fn pct_encoding_valid() {
+        let s = "%00%5C%F4%8F%BF%BD%69";
+        assert!(PctStr::new(s).is_ok());
+        let s = "No percent.";
+        assert!(PctStr::new(s).is_ok());
+        let s = "%e2%82%acwat";
+        assert!(PctStr::new(s).is_ok());
+    }
 
-	#[test]
-	fn try_from() {
-		let s = "%00%5C%F4%8F%BF%BD%69";
-		let _pcs = PctString::try_from(s).unwrap();
-		let _pcs: &PctStr = s.try_into().unwrap();
-	}
+    #[test]
+    fn try_from() {
+        let s = "%00%5C%F4%8F%BF%BD%69";
+        let _pcs = PctString::try_from(s).unwrap();
+        let _pcs: &PctStr = s.try_into().unwrap();
+    }
 
-	#[test]
-	fn encode_percent_always() {
-		struct NoopEncoder;
-		impl Encoder for NoopEncoder {
-			fn encode(&self, _: char) -> bool {
-				false
-			}
-		}
-		let s = "%";
-		let c = PctString::encode(s.chars(), NoopEncoder);
-		assert_eq!(c.as_str(), "%25");
-	}
+    #[test]
+    fn encode_percent_always() {
+        struct NoopEncoder;
+        impl Encoder for NoopEncoder {
+            fn encode(&self, _: char) -> bool {
+                false
+            }
+        }
+        let s = "%";
+        let c = PctString::encode(s.chars(), NoopEncoder);
+        assert_eq!(c.as_str(), "%25");
+    }
 }

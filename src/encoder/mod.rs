@@ -40,14 +40,14 @@ pub use uri::*;
 /// println!("{}", pct_string.as_str()); // => %48ello %57orld%21
 /// ```
 pub trait Encoder {
-	/// Decide if the given character must be encoded.
-	///
-	/// Note that the character `%` is always encoded even if this method returns `false` on it.
-	fn encode(&self, c: char) -> bool;
+    /// Decide if the given character must be encoded.
+    ///
+    /// Note that the character `%` is always encoded even if this method returns `false` on it.
+    fn encode(&self, c: char) -> bool;
 }
 
 impl<F: Fn(char) -> bool> Encoder for F {
-	fn encode(&self, c: char) -> bool {
-		self(c)
-	}
+    fn encode(&self, c: char) -> bool {
+        self(c)
+    }
 }
